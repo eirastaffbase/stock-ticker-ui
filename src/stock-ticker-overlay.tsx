@@ -11,7 +11,7 @@
  * limitations under the License.
  */
 
-import React, { ReactElement, useState, useEffect } from "react";
+import React, { ReactElement, useState, useEffect, useId } from "react";
 import { BlockAttributes } from "widget-sdk";
 import { useContainerSize } from "./useContainerSize";
 
@@ -25,41 +25,50 @@ export interface StockTickerOverlayProps extends BlockAttributes {
 export const StockTickerOverlay = ({
   symbol,
   weeks,
-  logo,
   stockgraphcolor,
 }: StockTickerOverlayProps): ReactElement => {
-  const [containerRef, size] = useContainerSize<HTMLDivElement>();
+  const [containerRef] = useContainerSize<HTMLDivElement>();
 
-  // Determine breakpoints based on container width
-  const isMid = size.width < 350;
-  const isSmall = size.width < 295;
-
-  // Font sizes, etc., now respond to container width
-  const fontSize = isSmall ? "0.7rem" : isMid ? "0.85rem" : "1rem";
-  const logoSize = isSmall ? 30 : isMid ? 35 : 50;
-  const svgWidth = isSmall ? 70 : isMid ? 90 : 120;
-  const svgHeight = isSmall ? 30 : isMid ? 30 : 40;
-  const dailyChangeFontSize = isSmall ? "0.6rem" : isMid ? "0.8rem" : "0.9rem";
+  // Base sizing; graph scales with container width
+  const fontSize = "1rem";
+  const svgHeight = 64;
+  const dailyChangeFontSize = "0.85rem";
 
   // State for stock data
   const [companyName, setCompanyName] = useState<string>("");
-  const [companyLogo, setCompanyLogo] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [closingPrices, setClosingPrices] = useState<number[]>([]);
+  const [closingDates, setClosingDates] = useState<string[]>([]);
   const [latestClose, setLatestClose] = useState<number | null>(null);
-  const [prevClose, setPrevClose] = useState<number | null>(null);
+  const [isGraphHover, setIsGraphHover] = useState(false);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [tooltip, setTooltip] = useState<{
+    x: number;
+    y: number;
+    price: number;
+    date: string;
+  } | null>(null);
+  const gradientId = useId();
 
   // Polygon.io config
   const apiKey = "peVSYdi2zmCBJYWXc0pe0d_B0FP6dXO7";
   const fallbackSymbol = "VNI";
   const fallbackCompanyName = "Vandelay Industries";
-  const fallbackLogo =
-    "https://eirastaffbase.github.io/stock-ticker-overlay/resources/VNI.png";
-  const fallbackClosingPrices = [
+  const fallbackClosingPrices2 = [
     141, 132, 147, 159, 163, 154, 120, 175, 160.02, 185.06,
   ];
-  const effectiveWeeks = weeks || 2;
+  const fallbackClosingPrices4 = [
+    120, 125, 132, 128, 136, 142, 139, 150, 147, 155, 162, 158, 166, 172, 168,
+    176, 182, 179, 185.06,
+  ];
+  const baseWeeks = weeks || 2;
+  const toggleWeeks = baseWeeks === 2 ? 4 : 2;
+  const [activeWeeks, setActiveWeeks] = useState(baseWeeks);
+
+  useEffect(() => {
+    setActiveWeeks(baseWeeks);
+  }, [baseWeeks]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -68,11 +77,13 @@ export const StockTickerOverlay = ({
 
       // Bypass API if symbol is "VNI" for demo
       if (symbol === "VNI") {
+        const fallbackPrices =
+          activeWeeks === 4 ? fallbackClosingPrices4 : fallbackClosingPrices2;
+        const fallbackDates = buildFallbackDates(fallbackPrices.length);
         setCompanyName(fallbackCompanyName);
-        setCompanyLogo(fallbackLogo);
-        setClosingPrices(fallbackClosingPrices);
-        setLatestClose(185.06);
-        setPrevClose(160.02);
+        setClosingPrices(fallbackPrices);
+        setClosingDates(fallbackDates);
+        setLatestClose(fallbackPrices[fallbackPrices.length - 1]);
         setLoading(false);
         return;
       }
@@ -86,30 +97,10 @@ export const StockTickerOverlay = ({
         }
         const detailsData = await detailsResponse.json();
 
-        // Decide on a logo: user-provided, or from Polygon
-        let logoDataUrl = "";
-        if (logo) {
-          logoDataUrl = logo;
-        } else if (detailsData?.results?.branding?.logo_url) {
-          const polygonLogoUrl =
-            detailsData.results.branding.logo_url + "?apiKey=" + apiKey;
-          try {
-            const logoResponse = await fetch(polygonLogoUrl);
-            if (logoResponse.ok) {
-              const svgText = await logoResponse.text();
-              logoDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
-                svgText
-              )}`;
-            }
-          } catch (logoError) {
-            console.error("Error fetching logo:", logoError);
-          }
-        }
-
         // Prepare date range for aggregator
         const today = new Date();
         const startDate = new Date(today);
-        startDate.setDate(today.getDate() - effectiveWeeks * 7);
+        startDate.setDate(today.getDate() - activeWeeks * 7);
         const endDateStr = today.toISOString().split("T")[0];
         const startDateStr = startDate.toISOString().split("T")[0];
 
@@ -122,19 +113,16 @@ export const StockTickerOverlay = ({
 
         if (aggsData.results?.length) {
           const closes = aggsData.results.map((r: any) => r.c);
+          const dates = aggsData.results.map((r: any) =>
+            new Date(r.t).toISOString().split("T")[0]
+          );
 
           setCompanyName(detailsData?.results?.name || "");
-          setCompanyLogo(logoDataUrl);
           setClosingPrices(closes);
+          setClosingDates(dates);
 
           const lastClose = closes[closes.length - 1];
           setLatestClose(lastClose);
-
-          if (closes.length > 1) {
-            setPrevClose(closes[closes.length - 2]);
-          } else {
-            setPrevClose(null);
-          }
         } else {
           throw new Error("No results found in Polygon daily aggregates.");
         }
@@ -143,10 +131,11 @@ export const StockTickerOverlay = ({
 
         // Fallback
         setCompanyName(fallbackCompanyName);
-        setCompanyLogo(fallbackLogo);
-        setClosingPrices(fallbackClosingPrices);
-        setLatestClose(185.06);
-        setPrevClose(160.02);
+        setClosingPrices(fallbackClosingPrices2);
+        setClosingDates(buildFallbackDates(fallbackClosingPrices2.length));
+        setLatestClose(
+          fallbackClosingPrices2[fallbackClosingPrices2.length - 1]
+        );
         setError(null);
       } finally {
         setLoading(false);
@@ -154,22 +143,26 @@ export const StockTickerOverlay = ({
     };
 
     fetchData();
-  }, [symbol, effectiveWeeks, logo]);
+  }, [symbol, activeWeeks]);
 
   // Generate smooth SVG path
+  const graphBaseWidth = 200;
+  const graphBaseHeight = 64;
+  const graphBottomPadding = 10;
   const generateSvgPath = (prices: number[]): string => {
     if (!prices || prices.length < 2) return "";
 
-    const width = 120;
-    const height = 40;
     const minPrice = Math.min(...prices);
     const maxPrice = Math.max(...prices);
-    const priceRange = maxPrice - minPrice;
-    const stepX = width / (prices.length - 1);
+    const priceRange = maxPrice - minPrice || 1;
+    const graphInnerHeight = graphBaseHeight - graphBottomPadding;
+    const stepX = graphBaseWidth / (prices.length - 1);
 
     const points = prices.map((price, i) => {
       const x = i * stepX;
-      const y = height - ((price - minPrice) / priceRange) * height;
+      const y =
+        graphInnerHeight -
+        ((price - minPrice) / priceRange) * graphInnerHeight;
       return { x, y };
     });
 
@@ -186,13 +179,76 @@ export const StockTickerOverlay = ({
     return pathD;
   };
 
-  // Price change
-  let priceChange: number | null = null;
-  if (latestClose !== null && prevClose !== null) {
-    priceChange = latestClose - prevClose;
-  }
-  const changeColor = priceChange && priceChange >= 0 ? "green" : "red";
+  const generateSvgAreaPath = (prices: number[]): string => {
+    if (!prices || prices.length < 2) return "";
 
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const priceRange = maxPrice - minPrice || 1;
+    const graphInnerHeight = graphBaseHeight - graphBottomPadding;
+    const stepX = graphBaseWidth / (prices.length - 1);
+
+    const points = prices.map((price, i) => {
+      const x = i * stepX;
+      const y =
+        graphInnerHeight -
+        ((price - minPrice) / priceRange) * graphInnerHeight;
+      return { x, y };
+    });
+
+    let areaD = `M ${points[0].x},${graphBaseHeight} L ${points[0].x},${points[0].y}`;
+    for (let i = 1; i < points.length; i++) {
+      const p0 = points[i - 1];
+      const p1 = points[i];
+      const cpX = (p0.x + p1.x) / 2;
+      const cp0 = { x: cpX, y: p0.y };
+      const cp1 = { x: cpX, y: p1.y };
+      areaD += ` C ${cp0.x},${cp0.y} ${cp1.x},${cp1.y} ${p1.x},${p1.y}`;
+    }
+    areaD += ` L ${points[points.length - 1].x},${graphBaseHeight} Z`;
+
+    return areaD;
+  };
+
+  const getGraphPoints = (prices: number[], dates: string[]) => {
+    if (!prices || prices.length < 2) return [];
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const priceRange = maxPrice - minPrice || 1;
+    const graphInnerHeight = graphBaseHeight - graphBottomPadding;
+    const stepX = graphBaseWidth / (prices.length - 1);
+
+    return prices.map((price, i) => {
+      const x = i * stepX;
+      const y =
+        graphInnerHeight -
+        ((price - minPrice) / priceRange) * graphInnerHeight;
+      return {
+        x,
+        y,
+        price,
+        date: dates[i] || "",
+      };
+    });
+  };
+
+  const formatDateShort = (dateStr: string) => {
+    if (!dateStr) return "";
+    const parsed = new Date(dateStr);
+    if (Number.isNaN(parsed.getTime())) return dateStr;
+    return parsed.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  // Price change
+  let rangeChange: number | null = null;
+  if (closingPrices.length > 1) {
+    rangeChange =
+      closingPrices[closingPrices.length - 1] - closingPrices[0];
+  }
+  const changeColor = rangeChange !== null && rangeChange >= 0 ? "green" : "red";
 
   // Graph color: use the user-specified color, or default to green or red based on change
   const graphColor = stockgraphcolor || changeColor;
@@ -204,66 +260,200 @@ export const StockTickerOverlay = ({
     boxSizing: "border-box",
     minHeight: "80px",
     fontSize,
+    fontFamily: "\"Space Grotesk\", \"Helvetica Neue\", Arial, sans-serif",
+    color: "#0f172a",
   };
 
-  const rowStyle: React.CSSProperties = {
+  const graphRowStyle: React.CSSProperties = {
+    width: "100%",
+    marginBottom: "0.5rem",
+    position: "relative",
+  };
+
+  const infoRowStyle: React.CSSProperties = {
     display: "flex",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
+    gap: "0.75rem",
     flexWrap: "wrap",
     fontSize,
   };
 
-  const logoContainerStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    width: `${logoSize}px`,
-    height: `${logoSize}px`,
-    borderRadius: "50%",
-    overflow: "hidden",
-    backgroundColor: "#efefef",
-    flexShrink: 0,
-    marginBottom: "0.5rem",
-  };
-
   const detailsStyle: React.CSSProperties = {
     flex: 1,
-    textAlign: "left",
-    marginLeft: "1rem",
-    minWidth: "100px",
-    marginBottom: "0.5rem",
-  };
-
-  const graphPriceStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    gap: "0.5rem",
-    flexShrink: 0,
+    textAlign: "right",
+    minWidth: "120px",
     marginBottom: "0.5rem",
   };
 
   const svgStyle: React.CSSProperties = {
     marginTop: "0px",
+    transition: "transform 160ms ease, filter 160ms ease",
+    transform: isGraphHover ? "translateY(-2px)" : "translateY(0)",
+    filter: isGraphHover ? "drop-shadow(0 6px 12px rgba(0,0,0,0.12))" : "none",
+    cursor: "pointer",
   };
 
   const priceInfoStyle: React.CSSProperties = {
-    textAlign: "right",
+    textAlign: "left",
     lineHeight: "1.3em",
-
   };
 
   return (
     <div ref={containerRef} className="stockwidget-container" style={containerStyle}>
-      <div className="stockwidget-row" style={rowStyle}>
-        {/* Logo */}
-        <div className="stockwidget-logo" style={logoContainerStyle}>
-          {companyLogo && (
-            <img
-              src={companyLogo}
-              alt={`${companyName} Logo`}
-              style={{ maxWidth: "70%", maxHeight: "70%", display: "block" }}
+      <div className="stockwidget-graphRow" style={graphRowStyle}>
+        {closingPrices.length > 1 && (
+          <svg
+            className="stockwidget-chart"
+            width="100%"
+            height={svgHeight}
+            viewBox="0 0 200 64"
+            preserveAspectRatio="none"
+            style={{ ...svgStyle, display: "block" }}
+            onMouseEnter={() => setIsGraphHover(true)}
+            onMouseLeave={() => {
+              setIsGraphHover(false);
+              setHoveredIndex(null);
+              setTooltip(null);
+            }}
+            onMouseMove={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              const x = event.clientX - rect.left;
+              const scaledX = (x / rect.width) * graphBaseWidth;
+              const points = getGraphPoints(closingPrices, closingDates);
+              if (!points.length) return;
+              const step = graphBaseWidth / (points.length - 1);
+              const index = Math.max(
+                0,
+                Math.min(points.length - 1, Math.round(scaledX / step))
+              );
+              setHoveredIndex(index);
+              const point = points[index];
+              if (!point) return;
+              setTooltip({
+                x: (point.x / graphBaseWidth) * rect.width,
+                y: (point.y / graphBaseHeight) * rect.height,
+                price: point.price,
+                date: point.date,
+              });
+            }}
+            onClick={() =>
+              setActiveWeeks((current) =>
+                current === baseWeeks ? toggleWeeks : baseWeeks
+              )
+            }
+          >
+            <defs>
+              <radialGradient
+                id={gradientId}
+                cx="0%"
+                cy="0%"
+                r="120%"
+                fx="0%"
+                fy="0%"
+              >
+                <stop
+                  offset="0%"
+                  stopColor={graphColor}
+                  stopOpacity={isGraphHover ? 0.3 : 0.18}
+                />
+                <stop
+                  offset="55%"
+                  stopColor={graphColor}
+                  stopOpacity={isGraphHover ? 0.16 : 0.08}
+                />
+                <stop offset="100%" stopColor={graphColor} stopOpacity={0} />
+              </radialGradient>
+            </defs>
+            <path
+              d={generateSvgAreaPath(closingPrices)}
+              fill={`url(#${gradientId})`}
+              stroke="#ffffff"
+              strokeWidth={2}
             />
+            <path
+              d={generateSvgPath(closingPrices)}
+              stroke={graphColor}
+              strokeWidth={2}
+              fill="none"
+            />
+            {(() => {
+              const points = getGraphPoints(closingPrices, closingDates);
+              if (hoveredIndex === null || !points[hoveredIndex]) return null;
+              const point = points[hoveredIndex];
+              return <circle cx={point.x} cy={point.y} r={3} fill="#ffffff" />;
+            })()}
+          </svg>
+        )}
+        {tooltip && (
+          <div
+            style={{
+              position: "absolute",
+              left: tooltip.x,
+              top: tooltip.y,
+              transform:
+                tooltip.y < 28
+                  ? "translate(-50%, 10px)"
+                  : "translate(-50%, -110%)",
+              background: "#ffffff",
+              color: "#0f172a",
+              borderRadius: "12px",
+              padding: "6px 8px",
+              fontSize: "11px",
+              fontWeight: 600,
+              lineHeight: "1.1",
+              textAlign: "center",
+              minWidth: "64px",
+              maxWidth: "110px",
+              boxShadow: "0 8px 18px rgba(15, 23, 42, 0.12)",
+              border: "1px solid rgba(15, 23, 42, 0.08)",
+              pointerEvents: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <div style={{ fontVariantNumeric: "tabular-nums" }}>
+              ${tooltip.price.toFixed(2)}
+            </div>
+            <div
+              style={{
+                fontSize: "10px",
+                fontWeight: 500,
+                color: "#475569",
+                marginTop: "2px",
+              }}
+            >
+              {formatDateShort(tooltip.date)}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="stockwidget-row" style={infoRowStyle}>
+        {/* Price & Range Change */}
+        <div className="stockwidget-price" style={priceInfoStyle}>
+          {latestClose !== null && (
+            <div
+              style={{
+                fontSize,
+                fontWeight: 600,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              ${latestClose.toFixed(2)}
+            </div>
+          )}
+          {rangeChange !== null && (
+            <div
+              style={{
+                color: changeColor,
+                fontSize: dailyChangeFontSize,
+                fontWeight: 600,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {rangeChange >= 0 ? "+" : "-"}$
+              {Math.abs(rangeChange).toFixed(2)}
+            </div>
           )}
         </div>
 
@@ -277,7 +467,8 @@ export const StockTickerOverlay = ({
               textOverflow: "ellipsis",
               lineHeight: "1.3em",
               fontSize: fontSize,
-              padding:"0px",
+              padding: "0px",
+              letterSpacing: "-0.01em",
             }}
           >
             {symbol}
@@ -289,52 +480,24 @@ export const StockTickerOverlay = ({
               fontSize: fontSize,
               lineHeight: "1.3em",
               margin: 0,
+              color: "#475569",
             }}
           >
             {companyName || ""}
           </p>
           {loading && <p>Loading data...</p>}
         </div>
-
-        {/* Chart + Price Info */}
-        <div className="stockwidget-graphPrice" style={graphPriceStyle}>
-          {/* Chart */}
-          {closingPrices.length > 1 && (
-            <svg
-              className="stockwidget-chart"
-              width={svgWidth}
-              height={svgHeight}
-              viewBox="0 0 130 40"
-              style={svgStyle}
-            >
-              <path
-                d={generateSvgPath(closingPrices)}
-                stroke={graphColor}
-                strokeWidth={2}
-                fill="none"
-              />
-            </svg>
-          )}
-
-          {/* Price & Daily Change */}
-          <div className="stockwidget-price" style={priceInfoStyle}>
-            {latestClose !== null && (
-              <div style={{ fontSize, fontWeight: 600 }}>
-                ${latestClose.toFixed(2)}
-              </div>
-            )}
-            {priceChange !== null && (
-              <div
-                style={{
-                  color: changeColor,
-                  fontSize: dailyChangeFontSize,
-                }}
-              >
-                ${Math.abs(priceChange).toFixed(2)}              </div>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );
 };
+  const buildFallbackDates = (length: number) => {
+    const today = new Date();
+    const dates: string[] = [];
+    for (let i = length - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      dates.push(d.toISOString().split("T")[0]);
+    }
+    return dates;
+  };

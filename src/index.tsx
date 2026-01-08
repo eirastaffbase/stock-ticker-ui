@@ -85,7 +85,7 @@ const blockDefinition: BlockDefinition = {
     blockLevel: 'block',
     configurationSchema: configurationSchema,
     uiSchema: uiSchema,
-    label: 'Stock Ticker',
+    label: 'Stock Ticker Overlay',
     iconUrl: icon
 };
 

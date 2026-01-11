@@ -31,11 +31,10 @@ export const StockTickerOverlay = ({
 
   // Base sizing; graph scales with container width
   const fontSize = "1rem";
-  const svgHeight = 64;
+  const svgHeight = 160;
   const dailyChangeFontSize = "0.85rem";
 
   // State for stock data
-  const [companyName, setCompanyName] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [closingPrices, setClosingPrices] = useState<number[]>([]);
@@ -53,16 +52,14 @@ export const StockTickerOverlay = ({
 
   // Polygon.io config
   const apiKey = "peVSYdi2zmCBJYWXc0pe0d_B0FP6dXO7";
-  const fallbackSymbol = "VNI";
-  const fallbackCompanyName = "Vandelay Industries";
   const fallbackClosingPrices2 = [
     141, 132, 147, 159, 163, 154, 120, 175, 160.02, 185.06,
   ];
   const fallbackClosingPrices4 = [
-    120, 125, 132, 128, 136, 142, 139, 150, 147, 155, 162, 158, 166, 172, 168,
-    176, 182, 179, 185.06,
+    120, 123, 127, 124, 130, 134, 132, 138, 136, 140, 143, 141, 145, 149, 147,
+    151, 154, 152, 156, 160, 158, 162, 165, 163, 168, 171, 169, 173.2,
   ];
-  const baseWeeks = weeks || 2;
+  const baseWeeks = weeks || 4;
   const toggleWeeks = baseWeeks === 2 ? 4 : 2;
   const [activeWeeks, setActiveWeeks] = useState(baseWeeks);
 
@@ -80,7 +77,6 @@ export const StockTickerOverlay = ({
         const fallbackPrices =
           activeWeeks === 4 ? fallbackClosingPrices4 : fallbackClosingPrices2;
         const fallbackDates = buildFallbackDates(fallbackPrices.length);
-        setCompanyName(fallbackCompanyName);
         setClosingPrices(fallbackPrices);
         setClosingDates(fallbackDates);
         setLatestClose(fallbackPrices[fallbackPrices.length - 1]);
@@ -117,7 +113,6 @@ export const StockTickerOverlay = ({
             new Date(r.t).toISOString().split("T")[0]
           );
 
-          setCompanyName(detailsData?.results?.name || "");
           setClosingPrices(closes);
           setClosingDates(dates);
 
@@ -130,11 +125,12 @@ export const StockTickerOverlay = ({
         console.error("Error fetching data:", error);
 
         // Fallback
-        setCompanyName(fallbackCompanyName);
-        setClosingPrices(fallbackClosingPrices2);
-        setClosingDates(buildFallbackDates(fallbackClosingPrices2.length));
+        const fallbackPrices =
+          activeWeeks === 4 ? fallbackClosingPrices4 : fallbackClosingPrices2;
+        setClosingPrices(fallbackPrices);
+        setClosingDates(buildFallbackDates(fallbackPrices.length));
         setLatestClose(
-          fallbackClosingPrices2[fallbackClosingPrices2.length - 1]
+          fallbackPrices[fallbackPrices.length - 1]
         );
         setError(null);
       } finally {
@@ -147,7 +143,7 @@ export const StockTickerOverlay = ({
 
   // Generate smooth SVG path
   const graphBaseWidth = 200;
-  const graphBaseHeight = 64;
+  const graphBaseHeight = 160;
   const graphBottomPadding = 10;
   const generateSvgPath = (prices: number[]): string => {
     if (!prices || prices.length < 2) return "";
@@ -261,29 +257,29 @@ export const StockTickerOverlay = ({
     minHeight: "80px",
     fontSize,
     fontFamily: "\"Space Grotesk\", \"Helvetica Neue\", Arial, sans-serif",
-    color: "#0f172a",
+    color: "#f8fafc",
   };
 
   const graphRowStyle: React.CSSProperties = {
     width: "100%",
-    marginBottom: "0.5rem",
+    marginTop: "0.4rem",
     position: "relative",
   };
 
-  const infoRowStyle: React.CSSProperties = {
+  const headerStyle: React.CSSProperties = {
     display: "flex",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    gap: "0.75rem",
-    flexWrap: "wrap",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: "0.15rem",
     fontSize,
   };
 
-  const detailsStyle: React.CSSProperties = {
-    flex: 1,
-    textAlign: "right",
-    minWidth: "120px",
-    marginBottom: "0.5rem",
+  const headerRowStyle: React.CSSProperties = {
+    width: "100%",
+    display: "flex",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: "0.5rem",
   };
 
   const svgStyle: React.CSSProperties = {
@@ -301,13 +297,54 @@ export const StockTickerOverlay = ({
 
   return (
     <div ref={containerRef} className="stockwidget-container" style={containerStyle}>
+      <div className="stockwidget-header" style={headerStyle}>
+        <div className="stockwidget-headerRow" style={headerRowStyle}>
+          <div className="stockwidget-price" style={priceInfoStyle}>
+            {latestClose !== null && (
+              <div
+                style={{
+                  fontSize,
+                  fontWeight: 600,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                ${latestClose.toFixed(2)}
+              </div>
+            )}
+          </div>
+          <div
+            className="stockwidget-symbol"
+            style={{
+              fontWeight: 600,
+              letterSpacing: "-0.01em",
+              textAlign: "right",
+            }}
+          >
+            {symbol}
+          </div>
+        </div>
+        {rangeChange !== null && (
+          <div
+            style={{
+              color: changeColor,
+              fontSize: dailyChangeFontSize,
+              fontWeight: 600,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {rangeChange >= 0 ? "+" : "-"}$
+            {Math.abs(rangeChange).toFixed(2)}
+          </div>
+        )}
+        {loading && <div>Loading data...</div>}
+      </div>
       <div className="stockwidget-graphRow" style={graphRowStyle}>
         {closingPrices.length > 1 && (
           <svg
             className="stockwidget-chart"
             width="100%"
             height={svgHeight}
-            viewBox="0 0 200 64"
+            viewBox="0 0 200 160"
             preserveAspectRatio="none"
             style={{ ...svgStyle, display: "block" }}
             onMouseEnter={() => setIsGraphHover(true)}
@@ -355,21 +392,23 @@ export const StockTickerOverlay = ({
                 <stop
                   offset="0%"
                   stopColor={graphColor}
-                  stopOpacity={isGraphHover ? 0.3 : 0.18}
+                  stopOpacity={isGraphHover ? 0.7 : 0.55}
                 />
                 <stop
                   offset="55%"
                   stopColor={graphColor}
-                  stopOpacity={isGraphHover ? 0.16 : 0.08}
+                  stopOpacity={isGraphHover ? 0.5 : 0.38}
                 />
-                <stop offset="100%" stopColor={graphColor} stopOpacity={0} />
+                <stop
+                  offset="100%"
+                  stopColor={graphColor}
+                  stopOpacity={0.16}
+                />
               </radialGradient>
             </defs>
             <path
               d={generateSvgAreaPath(closingPrices)}
               fill={`url(#${gradientId})`}
-              stroke="#ffffff"
-              strokeWidth={2}
             />
             <path
               d={generateSvgPath(closingPrices)}
@@ -426,67 +465,6 @@ export const StockTickerOverlay = ({
             </div>
           </div>
         )}
-      </div>
-
-      <div className="stockwidget-row" style={infoRowStyle}>
-        {/* Price & Range Change */}
-        <div className="stockwidget-price" style={priceInfoStyle}>
-          {latestClose !== null && (
-            <div
-              style={{
-                fontSize,
-                fontWeight: 600,
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              ${latestClose.toFixed(2)}
-            </div>
-          )}
-          {rangeChange !== null && (
-            <div
-              style={{
-                color: changeColor,
-                fontSize: dailyChangeFontSize,
-                fontWeight: 600,
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {rangeChange >= 0 ? "+" : "-"}$
-              {Math.abs(rangeChange).toFixed(2)}
-            </div>
-          )}
-        </div>
-
-        {/* Symbol & Name */}
-        <div className="stockwidget-details" style={detailsStyle}>
-          <h2
-            style={{
-              margin: 0,
-              fontWeight: 600,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              lineHeight: "1.3em",
-              fontSize: fontSize,
-              padding: "0px",
-              letterSpacing: "-0.01em",
-            }}
-          >
-            {symbol}
-          </h2>
-          <p
-            style={{
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              fontSize: fontSize,
-              lineHeight: "1.3em",
-              margin: 0,
-              color: "#475569",
-            }}
-          >
-            {companyName || ""}
-          </p>
-          {loading && <p>Loading data...</p>}
-        </div>
       </div>
     </div>
   );

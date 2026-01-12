@@ -146,18 +146,21 @@ export const StockTickerOverlay = ({
   const graphBaseWidth = 200;
   const graphBaseHeight = 140;
   const graphBaselineInset = 20;
+  const graphTopPadding = 6;
   const generateSvgPath = (prices: number[]): string => {
     if (!prices || prices.length < 2) return "";
 
     const minPrice = Math.min(...prices);
     const maxPrice = Math.max(...prices);
     const priceRange = maxPrice - minPrice || 1;
-    const graphInnerHeight = graphBaseHeight - graphBaselineInset;
+    const graphInnerHeight =
+      graphBaseHeight - graphBaselineInset - graphTopPadding;
     const stepX = graphBaseWidth / (prices.length - 1);
 
     const points = prices.map((price, i) => {
       const x = i * stepX;
       const y =
+        graphTopPadding +
         graphInnerHeight -
         ((price - minPrice) / priceRange) * graphInnerHeight;
       return { x, y };
@@ -182,12 +185,14 @@ export const StockTickerOverlay = ({
     const minPrice = Math.min(...prices);
     const maxPrice = Math.max(...prices);
     const priceRange = maxPrice - minPrice || 1;
-    const graphInnerHeight = graphBaseHeight - graphBaselineInset;
+    const graphInnerHeight =
+      graphBaseHeight - graphBaselineInset - graphTopPadding;
     const stepX = graphBaseWidth / (prices.length - 1);
 
     const points = prices.map((price, i) => {
       const x = i * stepX;
       const y =
+        graphTopPadding +
         graphInnerHeight -
         ((price - minPrice) / priceRange) * graphInnerHeight;
       return { x, y };
@@ -212,12 +217,14 @@ export const StockTickerOverlay = ({
     const minPrice = Math.min(...prices);
     const maxPrice = Math.max(...prices);
     const priceRange = maxPrice - minPrice || 1;
-    const graphInnerHeight = graphBaseHeight - graphBaselineInset;
+    const graphInnerHeight =
+      graphBaseHeight - graphBaselineInset - graphTopPadding;
     const stepX = graphBaseWidth / (prices.length - 1);
 
     return prices.map((price, i) => {
       const x = i * stepX;
       const y =
+        graphTopPadding +
         graphInnerHeight -
         ((price - minPrice) / priceRange) * graphInnerHeight;
       return {

@@ -28,6 +28,7 @@ export const StockTickerOverlay = ({
   stockgraphcolor,
 }: StockTickerOverlayProps): ReactElement => {
   const [containerRef] = useContainerSize<HTMLDivElement>();
+  const [graphRowRef, graphRowSize] = useContainerSize<HTMLDivElement>();
 
   // Base sizing; graph scales with container width
   const fontSize = "1rem";
@@ -91,7 +92,7 @@ export const StockTickerOverlay = ({
         if (!detailsResponse.ok) {
           throw new Error(`HTTP error! Status: ${detailsResponse.status}`);
         }
-        const detailsData = await detailsResponse.json();
+        await detailsResponse.json();
 
         // Prepare date range for aggregator
         const today = new Date();
@@ -143,15 +144,15 @@ export const StockTickerOverlay = ({
 
   // Generate smooth SVG path
   const graphBaseWidth = 200;
-  const graphBaseHeight = 160;
-  const graphBottomPadding = 10;
+  const graphBaseHeight = 140;
+  const graphBaselineInset = 20;
   const generateSvgPath = (prices: number[]): string => {
     if (!prices || prices.length < 2) return "";
 
     const minPrice = Math.min(...prices);
     const maxPrice = Math.max(...prices);
     const priceRange = maxPrice - minPrice || 1;
-    const graphInnerHeight = graphBaseHeight - graphBottomPadding;
+    const graphInnerHeight = graphBaseHeight - graphBaselineInset;
     const stepX = graphBaseWidth / (prices.length - 1);
 
     const points = prices.map((price, i) => {
@@ -181,7 +182,7 @@ export const StockTickerOverlay = ({
     const minPrice = Math.min(...prices);
     const maxPrice = Math.max(...prices);
     const priceRange = maxPrice - minPrice || 1;
-    const graphInnerHeight = graphBaseHeight - graphBottomPadding;
+    const graphInnerHeight = graphBaseHeight - graphBaselineInset;
     const stepX = graphBaseWidth / (prices.length - 1);
 
     const points = prices.map((price, i) => {
@@ -211,7 +212,7 @@ export const StockTickerOverlay = ({
     const minPrice = Math.min(...prices);
     const maxPrice = Math.max(...prices);
     const priceRange = maxPrice - minPrice || 1;
-    const graphInnerHeight = graphBaseHeight - graphBottomPadding;
+    const graphInnerHeight = graphBaseHeight - graphBaselineInset;
     const stepX = graphBaseWidth / (prices.length - 1);
 
     return prices.map((price, i) => {
@@ -238,13 +239,33 @@ export const StockTickerOverlay = ({
     });
   };
 
+  const formatDateNumeric = (dateStr: string) => {
+    if (!dateStr) return "";
+    const parsed = new Date(dateStr);
+    if (Number.isNaN(parsed.getTime())) return dateStr;
+    return parsed.toLocaleDateString("en-US", {
+      month: "2-digit",
+      day: "2-digit",
+      year: "2-digit",
+    });
+  };
+
   // Price change
   let rangeChange: number | null = null;
   if (closingPrices.length > 1) {
     rangeChange =
       closingPrices[closingPrices.length - 1] - closingPrices[0];
   }
-  const changeColor = rangeChange !== null && rangeChange >= 0 ? "green" : "red";
+  const changeColor =
+    rangeChange !== null && rangeChange >= 0 ? "#6CD28D" : "#ef4444";
+  const changePercent =
+    rangeChange !== null && closingPrices.length > 1
+      ? (rangeChange / (closingPrices[0] || 1)) * 100
+      : null;
+  const startDateLabel = closingDates.length
+    ? formatDateNumeric(closingDates[0])
+    : "";
+  const sinceLabel = startDateLabel ? `since ${startDateLabel}` : "since start";
 
   // Graph color: use the user-specified color, or default to green or red based on change
   const graphColor = stockgraphcolor || changeColor;
@@ -295,6 +316,16 @@ export const StockTickerOverlay = ({
     lineHeight: "1.3em",
   };
 
+  const hoverRadius = 3;
+  const graphScaleX = graphRowSize.width
+    ? graphRowSize.width / graphBaseWidth
+    : 1;
+  const graphScaleY = graphBaseHeight
+    ? svgHeight / graphBaseHeight
+    : 1;
+  const hoverRadiusX = hoverRadius / graphScaleX;
+  const hoverRadiusY = hoverRadius / graphScaleY;
+
   return (
     <div ref={containerRef} className="stockwidget-container" style={containerStyle}>
       <div className="stockwidget-header" style={headerStyle}>
@@ -326,19 +357,46 @@ export const StockTickerOverlay = ({
         {rangeChange !== null && (
           <div
             style={{
-              color: changeColor,
+              color: "#f8fafc",
               fontSize: dailyChangeFontSize,
               fontWeight: 600,
               fontVariantNumeric: "tabular-nums",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.35rem",
             }}
           >
-            {rangeChange >= 0 ? "+" : "-"}$
-            {Math.abs(rangeChange).toFixed(2)}
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 10 10"
+              aria-hidden="true"
+              focusable="false"
+              style={{ display: "block" }}
+            >
+              <polygon
+                points={rangeChange >= 0 ? "5,0 10,10 0,10" : "0,0 10,0 5,10"}
+                fill={changeColor}
+              />
+            </svg>
+            {changePercent !== null && (
+              <span style={{ color: changeColor }}>
+                {rangeChange >= 0 ? "+" : "-"}
+                {Math.abs(changePercent).toFixed(2)}%
+              </span>
+            )}
+            <span style={{ fontWeight: 400, color: "rgba(248, 250, 252, 0.72)" }}>
+              {sinceLabel}
+            </span>
           </div>
         )}
         {loading && <div>Loading data...</div>}
       </div>
-      <div className="stockwidget-graphRow" style={graphRowStyle}>
+      <div
+        ref={graphRowRef}
+        className="stockwidget-graphRow"
+        style={graphRowStyle}
+      >
         {closingPrices.length > 1 && (
           <svg
             className="stockwidget-chart"
@@ -381,30 +439,23 @@ export const StockTickerOverlay = ({
             }
           >
             <defs>
-              <radialGradient
-                id={gradientId}
-                cx="0%"
-                cy="0%"
-                r="120%"
-                fx="0%"
-                fy="0%"
-              >
+              <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop
                   offset="0%"
                   stopColor={graphColor}
-                  stopOpacity={isGraphHover ? 0.7 : 0.55}
+                  stopOpacity={isGraphHover ? 0.35 : 0.22}
                 />
                 <stop
-                  offset="55%"
+                  offset="60%"
                   stopColor={graphColor}
-                  stopOpacity={isGraphHover ? 0.5 : 0.38}
+                  stopOpacity={isGraphHover ? 0.5 : 0.35}
                 />
                 <stop
                   offset="100%"
                   stopColor={graphColor}
-                  stopOpacity={0.16}
+                  stopOpacity={isGraphHover ? 0.7 : 0.55}
                 />
-              </radialGradient>
+              </linearGradient>
             </defs>
             <path
               d={generateSvgAreaPath(closingPrices)}
@@ -415,12 +466,23 @@ export const StockTickerOverlay = ({
               stroke={graphColor}
               strokeWidth={2}
               fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
             />
             {(() => {
               const points = getGraphPoints(closingPrices, closingDates);
               if (hoveredIndex === null || !points[hoveredIndex]) return null;
               const point = points[hoveredIndex];
-              return <circle cx={point.x} cy={point.y} r={3} fill="#ffffff" />;
+              return (
+                <ellipse
+                  cx={point.x}
+                  cy={point.y}
+                  rx={hoverRadiusX}
+                  ry={hoverRadiusY}
+                  fill="#ffffff"
+                />
+              );
             })()}
           </svg>
         )}

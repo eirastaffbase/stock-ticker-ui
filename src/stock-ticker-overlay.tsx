@@ -144,8 +144,8 @@ export const StockTickerOverlay = ({
 
   // Generate smooth SVG path
   const graphBaseWidth = 200;
-  const graphBaseHeight = 140;
-  const graphBaselineInset = 10;
+  const graphBaseHeight = 180;
+  const graphBaselineInset = 30;
   const graphTopPadding = 6;
   const generateSvgPath = (prices: number[]): string => {
     if (!prices || prices.length < 2) return "";
@@ -447,21 +447,34 @@ export const StockTickerOverlay = ({
             }
           >
             <defs>
+              <filter
+                id={`${gradientId}-glow`}
+                x="-30%"
+                y="-30%"
+                width="160%"
+                height="160%"
+              >
+                <feGaussianBlur in="SourceGraphic" stdDeviation="0.8" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
               <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop
                   offset="0%"
                   stopColor={graphColor}
-                  stopOpacity={isGraphHover ? 0.35 : 0.22}
+                  stopOpacity={isGraphHover ? 0.4 : 0.26}
                 />
                 <stop
                   offset="60%"
                   stopColor={graphColor}
-                  stopOpacity={isGraphHover ? 0.5 : 0.35}
+                  stopOpacity={isGraphHover ? 0.6 : 0.42}
                 />
                 <stop
                   offset="100%"
                   stopColor={graphColor}
-                  stopOpacity={isGraphHover ? 0.7 : 0.55}
+                  stopOpacity={isGraphHover ? 0.8 : 0.64}
                 />
               </linearGradient>
             </defs>
@@ -477,6 +490,7 @@ export const StockTickerOverlay = ({
               strokeLinecap="round"
               strokeLinejoin="round"
               vectorEffect="non-scaling-stroke"
+              filter={`url(#${gradientId}-glow)`}
             />
             {(() => {
               const points = getGraphPoints(closingPrices, closingDates);

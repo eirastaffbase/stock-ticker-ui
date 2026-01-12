@@ -299,6 +299,7 @@ export const StockTickerOverlay = ({
     flexDirection: "column",
     alignItems: "flex-start",
     gap: "0.15rem",
+    lineHeight: "0px",
     fontSize,
   };
 

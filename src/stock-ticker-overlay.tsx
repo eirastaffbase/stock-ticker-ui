@@ -145,7 +145,7 @@ export const StockTickerOverlay = ({
   // Generate smooth SVG path
   const graphBaseWidth = 200;
   const graphBaseHeight = 140;
-  const graphBaselineInset = 20;
+  const graphBaselineInset = 10;
   const graphTopPadding = 6;
   const generateSvgPath = (prices: number[]): string => {
     if (!prices || prices.length < 2) return "";
@@ -299,7 +299,7 @@ export const StockTickerOverlay = ({
     flexDirection: "column",
     alignItems: "flex-start",
     gap: "0.15rem",
-    lineHeight: "0px",
+    lineHeight: "20px",
     fontSize,
   };
 
